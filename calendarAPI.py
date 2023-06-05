@@ -41,34 +41,40 @@ async def set_calendar(login_id: str, name: str, color: str, allDay: int, startD
         # allDay == 1이면 아래는 실행 x + alarmTime에 "null" 넣기
         if allDay == 0:
             if alarm == 0: # 설정된 시간
+                start_date_time = startDate + " " + startTime
+                start_date_time += ":00"
+
                 models.Calendar.create(db, auto_commit = True, user_id = is_exist_user.id, name = name, color = color, 
                                         allDay = allDay, startDate = startDate, startTime = startTime, endDate = endDate,
-                                        endTime = endTime, location = location, alarm = alarm, alarmTime = startTime, memo = memo)
+                                        endTime = endTime, location = location, alarm = alarm, alarmTime = start_date_time, memo = memo)
                 return statusCode.success            
             elif alarm == 1: # 10분전
                 start_detetime = datetime.strptime(startTime, "%H:%M")
                 modified_dateTime = start_detetime - timedelta(minutes=10)
-                modified_time_str = modified_dateTime.strftime("%H:%M")
-                result_alarmTime = startDate + " " + modified_time_str
+                modified_dateTime = startDate + " " + (str)(modified_dateTime).split(' ')[1]
+                # modified_time_str = modified_dateTime.strftime("%Y-%m-%d %H:%M")
+                # result_alarmTime = startDate + " " + modified_time_str
                 
                 models.Calendar.create(db, auto_commit = True, user_id = is_exist_user.id, name = name, color = color, 
                                         allDay = allDay, startDate = startDate, startTime = startTime, endDate = endDate,
-                                        endTime = endTime, location = location, alarm = alarm, alarmTime = result_alarmTime, memo = memo)
+                                        endTime = endTime, location = location, alarm = alarm, alarmTime = modified_dateTime, memo = memo)
                 return statusCode.success     
             elif alarm == 2: # 1시간전
                 start_detetime = datetime.strptime(startTime, "%H:%M")
                 modified_dateTime = start_detetime - timedelta(minutes=60)
-                modified_time_str = modified_dateTime.strftime("%H:%M")
-                result_alarmTime = startDate + " " + modified_time_str
+                modified_dateTime = startDate + " " + (str)(modified_dateTime).split(' ')[1]
+                # modified_time_str = modified_dateTime.strftime("%Y-%m-%d %H:%M")
+                # result_alarmTime = startDate + " " + modified_time_str
+
                 models.Calendar.create(db, auto_commit = True, user_id = is_exist_user.id, name = name, color = color, 
                                         allDay = allDay, startDate = startDate, startTime = startTime, endDate = endDate,
-                                        endTime = endTime, location = location, alarm = alarm, alarmTime = result_alarmTime, memo = memo)
+                                        endTime = endTime, location = location, alarm = alarm, alarmTime = modified_dateTime, memo = memo)
                 return statusCode.success     
             elif alarm == 3: # 하루 전
                 date_obj = datetime.strptime(startDate, "%Y-%m-%d")
                 previous_date = date_obj - timedelta(days=1)
                 start_time_str = previous_date.strftime("%Y-%m-%d")
-                result_alarmTime = start_time_str + " " + startTime
+                result_alarmTime = start_time_str + " " + startTime + ":00"
                 
                 models.Calendar.create(db, auto_commit = True, user_id = is_exist_user.id, name = name, color = color, 
                                         allDay = allDay, startDate = startDate, startTime = startTime, endDate = endDate,
@@ -286,5 +292,27 @@ async def cal_delete(login_id: str, list_id:int, db:Session = Depends(get_db)):
         return statusCode.not_id
     elif None == exist_cal: # 해당 조건에 대한 cal_id가 없는 경우
         return statusCode.none_correction_data    
+    else:
+        return statusCode.unexpected_error
+
+# return값은 name, startTime, AlarmTime, alarm
+@router.get("/get_cal_Alarm/{login_id}/{name}/{color}/{allDay}/{startDate}/{startTime}/{endDate}/{endTime}/{location}/{alarm}/{memo}",status_code=200)
+async def get_cal_Alarm(login_id: str, name: str, color: str, allDay: int, startDate: str, startTime: str, endDate: str, endTime: str, location: str, alarm: int, memo: str, db:Session = Depends(get_db)):
+    """
+    캘린더 리스트의 알람 정보 불러오기 API
+    """
+    is_exist_userId = db.query(models.Users).filter_by(login_id=login_id).first()
+    cal_list = db.query(models.Calendar).filter_by(user_id = is_exist_userId.id, name = name, startDate = startDate, endDate = endDate, alarm = alarm).first()
+
+    result_cal_list = {"cal_list_id":cal_list.id, "cal_name":cal_list.name, "cal_startTime": cal_list.startTime, "cal_alarm": cal_list.alarm, "cal_alarmTime": cal_list.alarmTime, "SUCCESS": 200}
+
+    if is_exist_userId == None:
+        return statusCode.no_exist_user
+    elif cal_list == None:
+        return statusCode.not_exist_cal_list
+    elif login_id == None:
+        return statusCode.not_id
+    elif cal_list:
+        return result_cal_list
     else:
         return statusCode.unexpected_error

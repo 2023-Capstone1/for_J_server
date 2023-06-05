@@ -168,6 +168,7 @@ async def time_delete(login_id: str, list_id:int, db:Session = Depends(get_db)):
         return statusCode.no_exist_user
     elif exist_user_id and exist_time: 
         db.query(models.TimeTracker).filter_by(user_id = exist_user_id.id, id=list_id).delete()
+        db.query(models.TimeTrackerOrder).filter_by(user_id = exist_user_id.id, id=list_id).delete()
         db.commit()
         return statusCode.success
     elif None == exist_user_id: # login_id가 없는 경우
@@ -249,11 +250,11 @@ async def play_click(login_id: str, list_id:int, startTime:str, db:Session = Dep
     elif startTime == None:
         return statusCode.no_time_startTime
     elif exist_user_id and exist_time:
-        if exist_time_order == None: # 처음 생성 시
-            models.TimeTrackerOrder.create(db, auto_commit = True, user_id = exist_user_id.id, list_id=list_id, order = 0, startTime = startTime, endTime="None", timeTaken="00:00:00")
+        if not exist_time_order: # 처음 생성 시
+            models.TimeTrackerOrder.create(db, auto_commit = True, user_id = exist_user_id.id, list_id=list_id, order = 1, startTime = startTime, endTime="None", timeTaken="00:00:00")
             db.commit()
 
-            create_list = db.query(models.TimeTrackerOrder).filter_by(user_id = exist_user_id.id, list_id=list_id, order = 0, startTime = startTime, endTime="None", timeTaken="00:00:00").first()
+            create_list = db.query(models.TimeTrackerOrder).filter_by(user_id = exist_user_id.id, list_id=list_id, order = 1, startTime = startTime, endTime="None", timeTaken="00:00:00").first()
             result += ("\"create_list_id" + "\":\"" + str(create_list.list_id) + "\", " 
                       +"\"create_list_order"+"\" : \""+ str(create_list.order) + "\", " 
                       +"\"create_list_startTime"+"\" : \""+ create_list.startTime +"\", "
@@ -262,39 +263,29 @@ async def play_click(login_id: str, list_id:int, startTime:str, db:Session = Dep
                       + "\"SUCCESS"+"\" : \"" + str(200) + "\"" + "}")
             return json.loads(result)
         else: # 처음 이후  
+            exist_timeTaken = db.query(models.TimeTrackerOrder).filter_by(user_id = exist_user_id.id, list_id=list_id).all()
+            total_taken = datetime.strptime(exist_timeTaken[len(exist_timeTaken)-1].timeTaken, "%H:%M:%S") # 바로 이전 튜플에 저장된 timeTaken값을 시간 형식으로 바꿈
+            total_taken = str(total_taken).split(" ")[1]
+
             maxIdx = 0
             maxOrder = 0 # order 값 제일 큰 애
             for i in range(1, len(exist_time_order)):
                 if (exist_time_order[maxIdx].order < exist_time_order[i].order):
                     maxIdx = i
                 maxOrder = exist_time_order[maxIdx].order 
-            models.TimeTrackerOrder.create(db, auto_commit = True, user_id = exist_user_id.id, list_id=list_id, order = maxOrder+1, startTime = startTime, endTime="None", timeTaken="00:00:00")
+            models.TimeTrackerOrder.create(db, auto_commit = True, user_id = exist_user_id.id, list_id=list_id, order = maxOrder+1, 
+                                           startTime = startTime, endTime="None", timeTaken=total_taken)
             db.commit()
             
-            create_list = db.query(models.TimeTrackerOrder).filter_by(user_id = exist_user_id.id, list_id=list_id, order = maxOrder+1, startTime = startTime, endTime="None", timeTaken="00:00:00").first()
+            create_list = db.query(models.TimeTrackerOrder).filter_by(user_id = exist_user_id.id, list_id=list_id, order = maxOrder+1, 
+                                                                      startTime = startTime, endTime="None", timeTaken=total_taken).first()
             result += ("\"create_list_id" + "\":\"" + str(create_list.list_id) + "\", " 
                       +"\"create_list_order" +"\" : \""+ str(create_list.order) + "\", " 
                       +"\"create_list_startTime"+"\" : \""+ create_list.startTime +"\", "
                       +"\"create_list_endTime"+"\" : \""+ create_list.endTime +"\", "
                       +"\"create_list_timeTaken"+"\" : \""+ create_list.timeTaken +"\", ")
 
-            # total_timeTaken 구하는 코드!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            # 타임 테이큰값이 '00:00:00'이 아닌 튜플 찾아서 타임 테이큰 총 합 구하기
-            exist_timeTaken = db.query(models.TimeTrackerOrder).filter_by(user_id = exist_user_id.id, list_id=list_id).all()
-            total_taken = "00:00:00" # 일단 타임 테이큰 "00:00:00"으로 놓고
-            for i in range(len(exist_timeTaken)):
-                if exist_timeTaken[i].timeTaken != "00:00:00":
-                    total_taken = datetime.strptime(total_taken, "%H:%M:%S") # 시간 형식으로 바꿈
-                    pre_taken = datetime.strptime(exist_timeTaken[i].timeTaken, "%H:%M:%S") # 튜플에 저장된 timeTaken값을 시간 형식으로 바꿈
-                    total_taken += timedelta(hours=pre_taken.hour, minutes=pre_taken.minute, seconds=pre_taken.second) # 시간 형식으로 바꾼 두 값 더해
-                    # 더한 결과 다시 스트링으로 변환
-                    total_taken = str(total_taken).split(" ")[1] # 이 과정안해주면 반복문 돌 때 total_taken 형식이 datetime이라 오류남 + "1900-01-01 00:00:00"이 형식이라 시간만 사용하려고 split 씀
-            # 반복문 다 돌고 나서
-            total_taken = str(total_taken) # 시간형식 스트링으로 바꾸기
-            if len(total_taken) < 8: 
-                total_taken = "0" + str(total_taken) # 이건 "00:00:00" 형식으로 맞추기 위함
- 
-            result += "\"total_timeTaken" + "\":\"" + str(total_taken) + "\", " + "\"SUCCESS"+"\" : \"" + str(200) + "\"" + "}"
+            result += "\"SUCCESS"+"\" : \"" + str(200) + "\"" + "}"
                     
             return json.loads(result)
     else:
@@ -330,8 +321,9 @@ async def pause_click(login_id: str, list_id:int, endTime:str, db:Session = Depe
         time_endTime = datetime.strptime(endTime, "%H:%M:%S")
         timeTaken = str(time_endTime-time_startTime)
         if len(timeTaken) < 8:
-            timeTaken = "0" + str(time_endTime-time_startTime)  
+            timeTaken = "0" + str(time_endTime-time_startTime)       
 
+        # 기록한 시간이 1분 미만일 때
         if datetime.strptime(timeTaken, "%H:%M:%S") < datetime.strptime("00:01:00", "%H:%M:%S"):
             db.query(models.TimeTrackerOrder).filter_by(user_id = exist_user_id.id, list_id = list_id, order = exist_time[maxIdx].order).delete()
             db.commit()
@@ -354,34 +346,41 @@ async def pause_click(login_id: str, list_id:int, endTime:str, db:Session = Depe
 
             return {"total_timeTaken":total_taken, "tuple":"None", "SUCCESS":200}
         else:
-            models.TimeTrackerOrder.create(db, auto_commit = True, user_id = exist_user_id.id, list_id=list_id, order=maxOrder, startTime=exist_time[maxIdx].startTime, endTime=endTime, timeTaken=timeTaken)
+            exist_timeTaken = db.query(models.TimeTrackerOrder).filter_by(user_id = exist_user_id.id, list_id=list_id).all()
+
+            if exist_timeTaken[len(exist_timeTaken)-1].timeTaken != "00:00:00": # 바로 전 튜플의 timeTaken값이 00:00:00이 아니면
+                total_taken = datetime.strptime(exist_timeTaken[len(exist_timeTaken)-1].timeTaken, "%H:%M:%S") # 튜플에 저장된 timeTaken값을 시간 형식으로 바꿈
+                total_taken += datetime.strptime(endTime, "%H:%M:%S") - datetime.strptime(exist_timeTaken[len(exist_timeTaken)-1].startTime, "%H:%M:%S")
+            else: # 처음 pause 눌렀을 때
+                total_taken = datetime.strptime(endTime, "%H:%M:%S") - datetime.strptime(exist_timeTaken[len(exist_timeTaken)-1].startTime, "%H:%M:%S")
+            
+            total_taken = (str)(total_taken)
+            if len(total_taken) < 8: 
+                total_taken = "0" + str(total_taken) # 이건 "00:00:00" 형식으로 맞추기 위함
+
+            # 더한 결과 다시 스트링으로 변환
+            if exist_timeTaken[len(exist_timeTaken)-1].order == 0:
+                pass
+            elif len(str(total_taken)) > 9:
+                total_taken = str(total_taken).split(" ")[1] # "1900-01-01 00:00:00"이 형식이라 시간만 사용하려고 split 씀
+            else:
+                pass
+            
+
+            # 새로운 오더(pause) 생성    
+            models.TimeTrackerOrder.create(db, auto_commit = True, user_id = exist_user_id.id, list_id=list_id, order=maxOrder, startTime=exist_time[maxIdx].startTime, endTime=endTime, timeTaken=total_taken)
             db.commit()
 
-            create_list = db.query(models.TimeTrackerOrder).filter_by(user_id = exist_user_id.id, list_id=list_id, order=maxOrder, startTime=exist_time[maxIdx].startTime, endTime=endTime, timeTaken=timeTaken).first()
+            create_list = db.query(models.TimeTrackerOrder).filter_by(user_id = exist_user_id.id, list_id=list_id, order=maxOrder, startTime=exist_time[maxIdx].startTime, endTime=endTime, timeTaken=total_taken).first()
             result = "{"
             result += ("\"create_list_id"+ "\":\"" + str(create_list.list_id) + "\", " 
                       +"\"create_list_order"+"\" : \""+ str(create_list.order) + "\", " 
                       +"\"create_list_startTime"+"\" : \""+ create_list.startTime +"\", "
                       +"\"create_list_endTime"+"\" : \""+ create_list.endTime +"\", "
                       +"\"create_list_timeTaken"+"\" : \""+ create_list.timeTaken +"\", ")
-            
-            # total_timeTaken 구하는 코드!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            # 타임 테이큰값이 '00:00:00'이 아닌 튜플 찾아서 타임 테이큰 총 합 구하기
-            exist_timeTaken = db.query(models.TimeTrackerOrder).filter_by(user_id = exist_user_id.id, list_id=list_id).all()
-            total_taken = "00:00:00" # 일단 타임 테이큰 "00:00:00"으로 놓고
-            for i in range(len(exist_timeTaken)):
-                if exist_timeTaken[i].timeTaken != "00:00:00":
-                    total_taken = datetime.strptime(total_taken, "%H:%M:%S") # 시간 형식으로 바꿈
-                    pre_taken = datetime.strptime(exist_timeTaken[i].timeTaken, "%H:%M:%S") # 튜플에 저장된 timeTaken값을 시간 형식으로 바꿈
-                    total_taken += timedelta(hours=pre_taken.hour, minutes=pre_taken.minute, seconds=pre_taken.second) # 시간 형식으로 바꾼 두 값 더해
-                    # 더한 결과 다시 스트링으로 변환
-                    total_taken = str(total_taken).split(" ")[1] # 이 과정안해주면 반복문 돌 때 total_taken 형식이 datetime이라 오류남 + "1900-01-01 00:00:00"이 형식이라 시간만 사용하려고 split 씀
-            # 반복문 다 돌고 나서
-            total_taken = str(total_taken) # 시간형식 스트링으로 바꾸기
-            if len(total_taken) < 8: 
-                total_taken = "0" + str(total_taken) # 이건 "00:00:00" 형식으로 맞추기 위함
 
-            result += "\"total_timeTaken" + "\":\"" + str(total_taken) + "\", " + "\"SUCCESS"+"\" : \"" + str(200) + "\"" + "}"
+            exist = "exist"
+            result += "\"tuple"+"\" : \""+ exist + "\", "+ "\"SUCCESS"+"\" : \"" + str(200) + "\"" + "}"
                     
             return json.loads(result)
     else:
@@ -408,7 +407,7 @@ async def get_time_list(login_id: str, list_id:int, db:Session = Depends(get_db)
     elif is_exist_timeOrder == None:
         return statusCode.no_exist_time_list
     elif is_exist_Torder == None:
-        result = {"timeOrder_total":0}
+        result = {"timeOrder_total": 0, "SUCCESS": 200}
         return result
     elif login_id and list_id and is_exist_timeOrder:
         result_timeOrder_list += "\"timeOrder_total"+"\" : \""+ str(len(is_exist_timeOrder)) + "\", "
@@ -424,7 +423,7 @@ async def get_time_list(login_id: str, list_id:int, db:Session = Depends(get_db)
                                     + "\"timeOrder_startTime"+str(i)+"\" : \""+ is_exist_timeOrder[i].startTime + "\", " 
                                     +"\"timeOrder_endTime"+str(i)+"\" : \""+ is_exist_timeOrder[i].endTime +"\", "
                                     +"\"timeOrder_timeTaken"+str(i)+"\" : \""+ is_exist_timeOrder[i].timeTaken +"\", ")
-        result_timeOrder_list += "}"
+        result_timeOrder_list +="}"
         return json.loads(result_timeOrder_list)
     else:
         return statusCode.unexpected_error
@@ -445,8 +444,9 @@ async def get_round_time(login_id: str, list_id:int, db:Session = Depends(get_db
         return statusCode.not_id
     elif list_id == None:
         return statusCode.no_list_id
-    elif is_exist_timeOrder == None:
-        return statusCode.no_exist_time_list
+    elif not is_exist_timeOrder:
+        result = {"timeOrder_total": 0, "SUCCESS": 200}
+        return result
     elif login_id and is_exist_timeOrder:
         # 보내줄 튜플 수 찾기
         total = 0
@@ -483,7 +483,7 @@ async def get_round_time(login_id: str, list_id:int, db:Session = Depends(get_db
                                     +"\"timeOrder_endTime"+str(i)+"\" : \""+ is_exist_timeOrder[i].endTime +"\", "
                                     +"\"timeOrder_timeTaken"+str(i)+"\" : \""+ timeTaken +"\", ")
 
-        result_timeOrder_list += "\"timeOrder_tosal"+"\" : \""+ str(total) + "\", " + "\"SUCCESS"+"\" : \"" + str(200) + "\"" + "}"
+        result_timeOrder_list += "\"timeOrder_total"+"\" : \""+ str(total) + "\", " + "\"SUCCESS"+"\" : \"" + str(200) + "\"" + "}"
         return json.loads(result_timeOrder_list)
     else:
         return statusCode.unexpected_error

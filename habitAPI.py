@@ -30,6 +30,11 @@ def create_habit(db, user_id, name, today, startDate, endDate, alarmSwitch, alar
                         today = today, startDate = startDate, endDate = endDate, 
                         alarmSwitch = alarmSwitch, alarm = alarm, repeatDay = "null", repeatN = repeatN, 
                         habit_color = habit_color, habit_nfc = habit_nfc, habit_state = habit_state, dayOfWeek = dayOfWeek)  
+    elif alarmSwitch == 1 and repeatN >= 1:
+        models.Habit.create(db, auto_commit = True, user_id = user_id, name = name, 
+                        today = today, startDate = startDate, endDate = endDate, 
+                        alarmSwitch = alarmSwitch, alarm = alarm, repeatDay = "null", repeatN = repeatN, 
+                        habit_color = habit_color, habit_nfc = habit_nfc, habit_state = habit_state, dayOfWeek = dayOfWeek) 
     else:
         models.Habit.create(db, auto_commit = True, user_id = user_id, name = name, 
                         today = today, startDate = startDate, endDate = endDate, 
@@ -392,5 +397,33 @@ async def update_habit(login_id: str, preName:str, currentName:str, preStartDate
                                  currentRepeatDay, currentRepeatN, currentHabit_color, currentHabit_nfc, currentHabit_state, new_date_to_create.weekday())
         return statusCode.success 
 
+    else:
+        return statusCode.unexpected_error
+    
+@router.get("/get_habit_Alarm/{login_id}/{name}/{startDate}/{endDate}/{alarmSwitch}/{alarm}/{repeatDay}/{repeatN}/{habit_color}/{habit_nfc}/{habit_state}",status_code=200)
+async def get_habit_Alarm(login_id: str, name: str, startDate:str, endDate:str, 
+                        alarmSwitch:int, alarm:str, repeatDay:str, repeatN:int, 
+                        habit_color:str, habit_nfc:str, habit_state:int, db:Session = Depends(get_db)):
+    """
+    해빗 리스트의 알람 정보 불러오기 API
+    """
+    is_exist_userId = db.query(models.Users).filter_by(login_id=login_id).first()
+    habit_list = db.query(models.Habit).filter_by(user_id = is_exist_userId.id, name = name, startDate = startDate, endDate = endDate, alarm = alarm).first()
+
+    result_habiy_list = {"habit_list_id":habit_list.id, 
+                         "habit_name":habit_list.name, 
+                         "habit_alarmSwitch": habit_list.alarmSwitch, 
+                         "habit_alarm": habit_list.alarm, "SUCCESS": 200}
+
+    if is_exist_userId == None:
+        return statusCode.no_exist_user
+    elif habit_list == None:
+        return statusCode.not_habit_list
+    elif not habit_list:
+        return statusCode.not_habit_list
+    elif login_id == None:
+        return statusCode.not_id
+    elif habit_list:
+        return result_habiy_list
     else:
         return statusCode.unexpected_error
