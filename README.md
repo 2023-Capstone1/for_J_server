@@ -18,5 +18,12 @@
 ### WBS
 ![image](https://github.com/2023-Capstone1/for_J_server/assets/86397095/1e3d4b72-599c-400a-840e-f361a06024b4)
 
+### ERD
+![image](https://github.com/2023-Capstone1/for_J_server/assets/86397095/f1592367-525b-4ad9-9909-80491444e185)
+
+### Flow-Chart
+![image](https://github.com/2023-Capstone1/for_J_server/assets/86397095/4fcd0ad5-6ee5-4da4-a647-993491fbd345)
+
+
 ### 사용 툴
 python, splAlchemy, FastAPI, MySQL
